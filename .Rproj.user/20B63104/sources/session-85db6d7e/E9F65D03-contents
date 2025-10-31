@@ -1,0 +1,600 @@
+---
+title: "RHCC-Zambia-Mockup"
+date: '`r format(Sys.Date(), "%Y-%b-%d")`'
+
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "RHCC Zambia Dashboard"
+
+format:
+  dashboard:
+    embed-resources: true
+    theme: cosmo
+    logo: "images/path_logo.png"
+    orientation: rows
+    scrolling: true
+---
+
+```{r setup, include=F}
+pacman::p_load(tidyverse,knitr,flexdashboard,plotly,kableExtra,sf,wesanderson)
+
+#Set global options for figure/table placement
+opts_chunk$set(echo=F, message=F, warning=F, results='asis', dpi=150)
+options(knitr.kable.NA = '')
+
+# setwd("C:/Users/wsheahan/Box/MNTD/Projects/RHCC (Rotary)/Dashboard")
+
+#Load data
+# csv_files <- list.files(path = "data/raw/zambia/csv", pattern = "\\.csv$", full.names = TRUE)
+# data_list <- lapply(csv_files, read_csv)
+# data_list <- lapply(data_list, janitor::clean_names)
+chisamba <- read_csv("data/raw/zambia/csv/Chisamba_data_sept25.csv") %>%
+  janitor::clean_names() %>%
+  mutate(district = "Chisamba")
+ngabwe <- read_csv("data/raw/zambia/csv/Ngabwe_data_sept25.csv") %>%
+  janitor::clean_names()%>%
+  mutate(district = "Ngabwe")
+kasama <- read_csv("data/raw/zambia/csv/Kasama_data_sept25.csv") %>%
+  janitor::clean_names()%>%
+  mutate(district = "Kasama")
+
+combined_data <- rbind(chisamba, ngabwe, kasama)
+
+combined_data <- combined_data %>%
+  mutate(period = if_else(periodname == "August 2025", ymd("2025-08-01"), ymd("2025-07-01"))) %>%
+rename(facility = organisationunitname) %>%
+  filter(facility != "zm Zambia Ministry of Health",
+         facility != "no Northern Province",
+         facility != "no Kasama District",
+         facility != "ce Chisamba District",
+         facility != "ce Ngabwe District")
+
+#Plotting functions
+palette = wes_palette("Darjeeling1")[c(1:3,5)]
+
+line_plot = function(dat, date, kpi, ylab){
+  ggplot(dat) + 
+    geom_line(aes(x = date, y = {{kpi}}, color = adm0), size = 1.2) +
+    geom_point(aes(x = date, y = {{kpi}}, color = adm0), size = 1.2) +
+    scale_color_manual(values = palette) +
+    labs(color = "Country", x ="Date", y = ylab) +
+    theme_light()
+}
+
+bar_plot = function(dat, kpi, ylab){
+  ggplot(dat %>%
+           filter(!is.na({{kpi}})) %>%
+           group_by(adm0)) + 
+    geom_col(aes(y = {{kpi}}, x = adm0, fill = adm0), 
+             position = position_dodge2(), width = 4) +
+    scale_fill_manual(values = palette) +
+    labs(fill = "Country", x ="Date", y = ylab) +
+    scale_y_continuous(expand = c(0,0)) +
+    theme_light()
+}
+
+dumbbell_plot = function(dat, kpi, ylab){
+  ggplot(dat %>%
+           filter(!is.na({{kpi}})) %>%
+           group_by(adm0) %>%
+           mutate(survey = as.factor(row_number())) %>%
+           ungroup()) + 
+    geom_point(aes(y = adm0, x = {{kpi}}, color = adm0, alpha = survey), size = 4) +
+    geom_line(aes(y = adm0, x = {{kpi}}, group = adm0)) +
+    scale_alpha_manual(values = c("1" = 1,"2" = 0.7,"3" = 0.4)) +
+    scale_color_manual(values = palette) +
+    labs(fill = "Country", x ="%", y = ylab, alpha = "Survey #", color = "Country") +
+    theme_light() +
+    xlim(c(0,100))
+}
+
+pie_chart = function(dat, kpi, ylab){
+  ggplot(dat %>%
+           group_by(adm0) %>%
+           filter(!is.na({{kpi}})) %>%
+           filter(row_number()==n()), 
+         aes(x="", y = {{kpi}}, fill = adm0)) +
+    geom_bar(stat="identity", width=1) +
+    geom_text(aes(label = paste0({{kpi}}, "%")), position = position_stack(vjust=0.5)) +
+    coord_polar("y", start=0) +
+    ggforce::facet_wrap_paginate(~adm0, nrow = 2, ncol = 2) +
+    scale_fill_manual(values = palette) +
+    labs(fill = ylab, x ="", y = "") +
+    theme_void()
+}
+```
+
+# Zambia
+
+All Data depicted in this dashboard are derived from DHIS2. This is a work in progress using a limited sample from a small number of districts in Zambia to build out a fully realized data dashboard.
+
+## Row 1
+
+**RHCC1** - Under-5 Mortality per 1,000 Live Births
+
+Missing Mortality Data in Sample
+
+## Row 2
+
+### 
+**RHCC2** - % of *Malaria* Cases Managed in the Community
+
+
+### 
+**RHCC2** - % of *Pneumonia* Cases Managed in the Community
+
+```{r}
+# ggplotly(line_plot(dat, date, rhcc2p, "% of pneumonia cases managed in community")+
+#            scale_y_continuous(lim = c(0,100), expand = c(0,0)))
+```
+
+### 
+**RHCC2** - % of *Diarrhoea* Cases Managed in the Community
+
+```{r}
+# ggplotly(line_plot(dat, date, rhcc2d, "% of diarrhoea cases managed in community")+
+#            scale_y_continuous(lim = c(0,100), expand = c(0,0)))
+```
+
+## Row 3
+
+### 
+**RHCC3** - # of CHWS Trained in iCCM
+
+```{r, echo=FALSE}
+training_data <- openxlsx::read.xlsx("data/raw/zambia/CHW_Training info_Tracking_RHCC 12_Aug 2025.xlsx", 
+                                     sheet = "Aggregates_ICCM_training_RHCC") %>%
+  janitor::clean_names()
+
+training_data_grp <- training_data %>%
+  filter(!is.na(province)) %>%
+  mutate(male_chws_equipped = if_else(work_tools_bicycles_etc_handover_yes_no == "Yes", actual_number_of_male_ch_ws_trained, 0),
+         female_chws_equipped = if_else(work_tools_bicycles_etc_handover_yes_no == "Yes", actual_number_of_female_ch_ws_trained, 0)) %>%
+  group_by(province, district) %>%
+  summarise(male_chws_trained = sum(actual_number_of_male_ch_ws_trained, na.rm = TRUE),
+            female_chws_trained = sum(actual_number_of_female_ch_ws_trained, na.rm = TRUE),
+            male_chws_equipped = sum(male_chws_equipped, na.rm = TRUE),
+            female_chws_equipped = sum(female_chws_equipped, na.rm = TRUE))
+```
+
+```{r}
+training_data_grp %>%
+  pivot_longer(cols = male_chws_trained:female_chws_equipped, names_to = "stat", values_to = "count") %>%
+  filter(grepl("trained", stat) == TRUE) %>%
+  ggplot() +
+  geom_col(aes(x = district, y = count, fill = stat),
+           position = "dodge") +
+  scale_fill_manual(values = palette,
+                    labels = c("female_chws_trained" = "Female CHWs",
+                               "male_chws_trained" = "Male CHWs")) +
+  theme_bw() +
+  labs(x = "District", y = "# CHWs Trained")
+```
+###
+**RHCC4** - % of District Target Reached for CHW Training
+```{r}
+all_zam <- training_data_grp %>%
+  pivot_longer(cols = male_chws_trained:female_chws_equipped, names_to = "stat", values_to = "count") %>%
+  filter(grepl("trained", stat) == TRUE) %>%
+  mutate(district = "Zambia") %>%
+  group_by(district) %>%
+  summarise(chws_trained = sum(count, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(target_chws = 2086)
+
+training_data_grp %>%
+  pivot_longer(cols = male_chws_trained:female_chws_equipped, names_to = "stat", values_to = "count") %>%
+  filter(grepl("trained", stat) == TRUE) %>%
+  group_by(district) %>%
+  summarise(chws_trained = sum(count, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(target_chws = case_when(grepl("Kasama", district) == TRUE ~ 747,
+                                 grepl("Chisamba", district) == TRUE ~ 346,
+                                 grepl("Ngabwe", district) == TRUE ~ 94,
+                                 grepl("Luwingu", district) == TRUE ~ 226,
+                                 grepl("Chilubi", district) == TRUE ~ 241)) %>%
+  rbind(all_zam) %>%
+  mutate(pct_trained = round(chws_trained/target_chws * 100)) %>%
+  ggplot() +
+  geom_col(aes(x = district, y = target_chws), fill = "lightgray", width = 0.5) +
+  geom_col(aes(x = district, y = chws_trained), fill = "steelblue1", width = 0.6, alpha = 0.3) +
+  geom_text(aes(x = district, y = chws_trained + 100, label = paste0(pct_trained, "%")), 
+            color = "black", size = 4) +
+  #coord_flip() +
+  theme_bw() +
+  labs(x = "District", y = "Number of CHWs Trained (% of Target)")
+```
+
+
+### 
+**RHCC4** - # of CHWs Equipped According to National Guidelines
+
+```{r}
+training_data_grp %>%
+  pivot_longer(cols = male_chws_trained:female_chws_equipped, names_to = "stat", values_to = "count") %>%
+  filter(grepl("equipped", stat) == TRUE) %>%
+  ggplot() +
+  geom_col(aes(x = district, y = count, fill = stat),
+           position = "dodge") +
+  scale_fill_manual(values = palette,
+                    labels = c("female_chws_equipped" = "Female CHWs",
+                               "male_chws_equipped" = "Male CHWs")) +
+  theme_bw() +
+  labs(x = "District", y = "# CHWs Equipped")
+```
+### 
+**RHCC4** - % of CHWs Trained That Are Equipped According to National Guidelines
+
+```{r}
+training_data_grp %>%
+  mutate(pct_male_equipped = round(male_chws_equipped/male_chws_trained * 100, 2),
+         pct_female_equipped = round(female_chws_equipped/female_chws_trained * 100, 2)) %>%
+  pivot_longer(cols = pct_male_equipped:pct_female_equipped, names_to = "stat", values_to = "count") %>%
+  ggplot() +
+  geom_col(aes(x = district, y = count, fill = stat),
+           position = "dodge") +
+  scale_fill_manual(values = palette,
+                    labels = c("pct_female_equipped" = "Female CHWs",
+                               "pct_male_equipped" = "Male CHWs")) +
+  theme_bw() +
+  labs(x = "District", y = "% CHWs Equipped")
+```
+
+## Row 4 
+
+### 
+**RHCC5** - # of Clinical CHWs Trained and Deployed for iCCM per 1,000 children under-five in RHCC areas
+
+```{r}
+# ggplotly(bar_plot(dat, rhcc5_n/rhcc5_d*1000, "# of CHWs per 1,000 children under 5") +
+#            scale_y_continuous(lim = c(0,15), expand = c(0,0)))
+```
+
+### 
+**RHCC5** - # of Clinical CHWs Trained and Deployed for iCCM
+
+```{r}
+# ggplotly(ggplot(dat %>%
+#                  filter(!is.na(rhcc5_n)) %>%
+#                  group_by(adm0)) + 
+#           geom_col(aes(y = RHCC.Target, x = adm0, fill = adm0, alpha = "RHCC target"), 
+#                    position = position_dodge2(), width = 4) +
+#           geom_col(aes(y = rhcc5_n, x = adm0, fill = adm0, alpha = "Achieved"), 
+#                    position = position_dodge2(), width = 4) +
+#           scale_fill_manual(values = palette) +
+#           scale_alpha_manual(values = c("RHCC target" = 0.5, "Achieved" = 1)) +
+#           labs(fill = "Country", x ="Date", y = "# of CHWs", alpha = "") +
+#           scale_y_continuous(expand = c(0,0)) +
+#           theme_light())
+```
+
+### 
+**RHCC6** - # of CHW Supervisors Trained
+
+```{r}
+# ggplotly(bar_plot(dat, rhcc6, "# of CHW supervisors trained"))
+```
+
+## Row 5 
+
+### 
+**RHCC7** - % of CHWs Who Received At Least One Supervisory Contact in the Prior Month
+
+```{r}
+# ggplotly(line_plot(dat, date, rhcc7, "% of CHWs with supervisory contact during prior month")+
+#            scale_y_continuous(lim = c(0,100), expand = c(0,0)))
+```
+
+
+### 
+**RHCC8** - % of CHWs Who Correctly Count Respiratory Rate to Diagnose ARI
+
+```{r}
+# ggplotly(line_plot(dat, date, rhcc8, "# of CHWs correctly counting respiratory rate")+
+#            scale_y_continuous(lim = c(0,100), expand = c(0,0)))
+```
+
+## Row 6
+
+### 
+**RHCC9** - % of Sick Child Cases Recommended for Referral by CHW for Malaria
+
+```{r}
+managed_dat <- combined_data %>%
+  dplyr::select(district, facility, period, periodname, diarrhoea_5_female, diarrhoea_5_male, pneumonia_female_5, pneumonia_male_5, rhcc_malaria_cases_treated_5yrs) %>%
+  pivot_longer(cols = contains("5"), names_to = "stat2", values_to = "managed_count") %>%
+  filter(!is.na(managed_count)) %>%
+  mutate(age_group = if_else(grepl("5", stat2) == TRUE, "Under 5", "All Ages"),
+         gender = case_when(grepl("_female", stat2) == TRUE ~ "Female",
+                            grepl("_male", stat2) == TRUE ~ "Male",
+                            TRUE ~ "Combined"),
+         disease = case_when(grepl("malaria", stat2) == TRUE ~ "Malaria",
+                             grepl("pneumonia", stat2) == TRUE ~ "Pneumonia",
+                             grepl("diarrhoea", stat2) == TRUE ~ "Diarrhoea"))
+
+  
+referral_dat <- combined_data %>% dplyr::select(district, facility, period, periodname, contains("referred")) %>%
+  pivot_longer(cols = contains("referred"), names_to = "stat", values_to = "referral_count") %>%
+  filter(!is.na(referral_count)) %>%
+  mutate(age_group = if_else(grepl("5", stat) == TRUE, "Under 5", "All Ages"),
+         gender = case_when(grepl("_female", stat) == TRUE ~ "Female",
+                            grepl("_male", stat) == TRUE ~ "Male",
+                            TRUE ~ "Combined"),
+         disease = case_when(grepl("malaria", stat) == TRUE ~ "Malaria",
+                             grepl("pneumonia", stat) == TRUE ~ "Pneumonia",
+                             grepl("diarrhoea", stat) == TRUE ~ "Diarrhoea"))
+
+
+sick_kids_plotting_dat <- referral_dat %>%
+  left_join(managed_dat, by = c("district", "facility", "period", "periodname", "age_group", "gender", "disease")) %>%
+  #only under 5s
+  filter(!is.na(stat2)) %>%
+  group_by(district, period, gender, disease) %>%
+  summarise(referral_count = sum(referral_count, na.rm = TRUE), 
+            managed_count = sum(managed_count, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(prop_referred = round(referral_count/managed_count, 2))
+
+#malaria
+sick_kids_plotting_dat %>%
+  filter(disease == "Malaria") %>%
+  ggplot() +
+  geom_col(aes(x = as.factor(period), y = prop_referred, fill = gender), position = "dodge") +
+  scale_y_continuous(lim = c(0,1), expand = c(0,0)) +
+  #geom_hline(aes(yintercept = 1), col = "red", lty = "dashed") +
+  labs(x = "Period", y = "Proportion of Sick Under-5 Children Referred") +
+  theme_bw() +
+  facet_wrap(vars(district))
+
+```
+
+### 
+**RHCC9** - % of Sick Child Cases Recommended for Referral by CHW for Pneumonia
+```{r}
+#pneumonia
+sick_kids_plotting_dat %>%
+  filter(disease == "Pneumonia") %>%
+  ggplot() +
+  geom_col(aes(x = as.factor(period), y = prop_referred, fill = gender), position = "dodge") +
+  scale_y_continuous(lim = c(0,1), expand = c(0,0)) +
+  #geom_hline(aes(yintercept = 1), col = "red", lty = "dashed") +
+  labs(x = "Period", y = "Proportion of Sick Under-5 Children Referred") +
+  theme_bw() +
+  facet_wrap(vars(district))
+
+```
+
+### 
+**RHCC9** - % of Sick Child Cases Recommended for Referral by CHW for Diarrhoea
+```{r}
+#diarrhoea
+sick_kids_plotting_dat %>%
+  filter(disease == "Diarrhoea") %>%
+  ggplot() +
+  geom_col(aes(x = as.factor(period), y = prop_referred, fill = gender), position = "dodge") +
+  scale_y_continuous(lim = c(0,1), expand = c(0,0)) +
+  #geom_hline(aes(yintercept = 1), col = "red", lty = "dashed") +
+  labs(x = "Period", y = "Proportion of Sick Under-5 Children Referred") +
+  theme_bw() +
+  facet_wrap(vars(district))
+```
+
+
+
+### 
+**RHCC9.1** - % of Sick Children Referred by CHWs Who are Received at Referral Facility
+
+```{r}
+# ggplotly(line_plot(dat, date, rhcc9.1, "% of referrals received")+
+#            scale_y_continuous(lim = c(0,100), expand = c(0,0)))
+```
+
+## Row 7 
+
+ **RHCC10** - % of CHWs Trained in iCCM Who Are Providing iCCM 1 Year After Initial Training
+
+```{r}
+# ggplotly(bar_plot(dat, rhcc10, "% of CHWs providing iCCM 1 year after initial training")+
+#            scale_y_continuous(lim = c(0,100), expand = c(0,0)))
+```
+
+## Row 8 
+
+### 
+**RHCC11** - % of iCCM Sites/Outreach Posts with No Stock-outs of Key *Malaria* Medicines and Diagnostics in the Past Month
+
+```{r}
+combined_data %>%
+  replace(is.na(.), 0) %>%
+  mutate(act_stockout = if_else(chw_act_stocks_6s_balance_on_hand + chw_act_stocks_12s_balance_on_hand + chw_act_stocks_18s_balance_on_hand + chw_act_stocks_24s_balance_on_hand < 1, 1, 0)) %>%
+  group_by(district, period) %>%
+  summarise(n_facilities = n(),
+            n_stockouts = sum(act_stockout, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(percent_stocked_out = round(n_stockouts/n_facilities * 100, 2),
+         percent_not_stocked_out = 100-percent_stocked_out) %>%
+  ggplot() +
+  #geom_line(aes(x = period, y = percent_not_stocked_out, color = district)) +
+  #scale_color_manual(values = palette) +
+  geom_col(aes(x = as.factor(period), y = percent_not_stocked_out, fill = district),
+           position = "dodge") +
+  scale_fill_manual(values = palette) +
+  scale_y_continuous(lim = c(0,100), expand = c(0,0)) +
+  labs(x = "Month", y = "Percent of Facilities NOT \nStocked Out of ACTs") +
+  theme_bw() +
+  facet_wrap(vars(district)) +
+  theme(axis.title.y = element_text(face = "bold"))
+```
+
+### 
+**RHCC11** - % of iCCM Sites/Outreach Posts with No Stock-outs of Key *Pneumonia* or *Diarrhoea* Medicines and Diagnostics in the Past Month
+
+```{r}
+combined_data %>%
+  replace(is.na(.), 0) %>%
+  mutate(amoxyl_stockout = if_else(amoxyl < 1, 1, 0),
+         zinc_stockout = if_else(zinc < 1, 1, 0),
+         ors_stockout = if_else(ors < 1, 1, 0),
+         panadol_stockout = if_else(panadol < 1, 1, 0)) %>%
+  group_by(district, period) %>%
+  summarise(n_facilities = n(),
+            n_amoxyl_stockouts = sum(amoxyl_stockout, na.rm = TRUE),
+            n_zinc_stockouts = sum(zinc_stockout, na.rm = TRUE),
+            n_ors_stockouts = sum(ors_stockout, na.rm = TRUE),
+            n_panadol_stockouts = sum(panadol_stockout, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(percent_amoxyl_stocked_out = round(n_amoxyl_stockouts/n_facilities * 100, 2),
+         percent_amoxyl_not_stocked_out = 100-percent_amoxyl_stocked_out,
+         percent_zinc_stocked_out = round(n_zinc_stockouts/n_facilities * 100, 2),
+         percent_zinc_not_stocked_out = 100-percent_zinc_stocked_out,
+         percent_ors_stocked_out = round(n_ors_stockouts/n_facilities * 100, 2),
+         percent_ors_not_stocked_out = 100-percent_ors_stocked_out,
+         percent_panadol_stocked_out = round(n_panadol_stockouts/n_facilities * 100, 2),
+         percent_panadol_not_stocked_out = 100-percent_panadol_stocked_out) %>%
+  pivot_longer(cols = c(percent_amoxyl_not_stocked_out, percent_zinc_not_stocked_out,
+               percent_ors_not_stocked_out, percent_panadol_not_stocked_out),
+               names_to = "stat", values_to = "pct") %>%
+  ggplot() +
+  geom_col(aes(x = as.factor(period), y = pct, fill = stat),
+           position = "dodge") +
+  scale_fill_manual(values = palette,
+                    labels = c("amoxyl", "zinc", "ORS", "panadol")) +
+  scale_y_continuous(lim = c(0,100), expand = c(0,0)) +
+  labs(x = "Month", y = "Percent of Facilities NOT \nStocked Out of Medications") +
+  theme_bw() +
+  facet_wrap(vars(district)) +
+  theme(axis.title.y = element_text(face = "bold"))
+```
+
+<!-- ### -->
+<!-- **RHCC11** - % of iCCM Sites/Outreach Posts with No Stock-outs of Key *Diarrhoea* Medicines and Diagnostics in the Past Month -->
+
+<!-- ```{r} -->
+<!-- # ggplotly(line_plot(dat, date, rhcc11_d, "% of iCCM sites/outreach posts with no stock-outs") + -->
+<!-- #            scale_y_continuous(lim = c(0,100), expand = c(0,0))) -->
+<!-- ``` -->
+
+## Row 9
+
+### 
+**RHCC12** - % of CHWs Who Had No Stock-outs of *Malaria* Commodities During the Reporting Period
+
+```{r}
+# ggplotly(line_plot(dat, date, rhcc12_m, "% of CHWs with no stock-outs") +
+#            scale_y_continuous(lim = c(0,100), expand = c(0,0)))
+```
+
+### 
+**RHCC12** - % of CHWs Who Had No Stock-outs of *Pneumonia* Commodities During the Reporting Period
+
+```{r}
+# ggplotly(line_plot(dat, date, rhcc12_p, "% of CHWs with no stock-outs") +
+#            scale_y_continuous(lim = c(0,100), expand = c(0,0)))
+```
+
+### 
+**RHCC12** - % of CHWs Who Had No Stock-outs of *Diarrhoea* Commodities During the Reporting Period
+
+```{r}
+# ggplotly(line_plot(dat, date, rhcc12_d, "% of CHWs with no stock-outs") +
+#            scale_y_continuous(lim = c(0,100), expand = c(0,0)))
+```
+
+## Row 10 
+
+### 
+**RHCC13** - % of Reports Submitted on Time
+
+```{r}
+# pie_chart(dat, rhcc13, "% on time")
+```
+
+### 
+**RHCC14** - % of Accurate Reports Submitted
+
+```{r}
+# pie_chart(dat, rhcc14, "% accurate")
+```
+
+### 
+**RHCC15** - % of Complete Reports Submitted
+
+```{r}
+# pie_chart(dat, rhcc15, "% complete")
+```
+
+## Row 11 {data-height=50}
+
+Caregivers of children under-5 were surveyed at baseline and endline to ascertain their knowledge of iCCM services, the location of their CHW, and warning signs of childhood illnesses that necessitate immediate medical attention.
+
+## Row 12
+
+###
+**RHCC16** - % of Caregivers Aware of iCCM Services
+
+```{r}
+# ggplotly(dumbbell_plot(dat, rhcc16, "% of caregivers aware of iCCM services"))
+```
+
+### 
+**RHCC17** - % of Caregivers Who Know the Location of Their CHW
+
+```{r}
+# ggplotly(dumbbell_plot(dat, rhcc17, "% of caregivers who know CCM location"))
+```
+
+###
+**RHCC18** - % of Caregivers Who Know Two or More Signs of Childhood Illness That Require Immediate Assessment and, if Appropriate, Treatment
+
+```{r}
+# ggplotly(dumbbell_plot(dat, rhcc18, "% of caregivers who know warning signs"))
+```
+
+# KPI definitions
+
+```{r}
+data.frame(KPI = c("RHCC1","RHCC2","RHCC3","RHCC4","RHCC5","RHCC6","RHCC7","RHCC8","RHCC9","RHCC9.1","RHCC10","RHCC11","RHCC12","RHCC13","RHCC14","RHCC15","RHCC16","RHCC17","RHCC18"), 
+           Description = c("Under-five mortality rate in RHCC project areas",
+                           "% of cases managed at community level",
+                           "# of CHWs trained",
+                           "# of trained CHWs equipped according to national guidelines",
+                           "# of CHWs trained and deployed for iCCM per 1,000 children under-five in RHCC areas",
+                           "# of CHW supervisors trained",
+                           "% of CHWs who received at least one supervisory contact in the prior month (where registers were reviewed)",
+                           "% of CHWs who correctly count respiratory rate to diagnose ARI",
+                           "% of sick child cases recommended for referral by CHW",
+                           "% of sick children referred by CHWs who are received at referral facility",
+                           "% of CHWs trained in iCCM who are providing iCCM 1 year after initial training",
+                           "% of iCCM sites/outreach posts with no stock-outs of key iCCM medicines and diagnostics in the past month",
+                           "% of CHWs who had no stock-outs of commodities during the reporting period",
+                           "% of reports submitted on time",
+                           "% of accurate reports submitted",
+                           "% of complete reports submitted",
+                           "% of community members aware of iCCM services",
+                           "% of community members who know the location of their CHW",
+                           "% of caregivers who know two or more signs of childhood illness that require immediate assessment and, if appropriate, treatment"),
+           `Disaggregation` = c("",
+                           "",
+                           "",
+                           "",
+                           "",
+                           "",
+                           "",
+                           "",
+                           "",
+                           "",
+                           "",
+                           "disease",
+                           "disease",
+                           "",
+                           "",
+                           "",
+                           "",
+                           "",
+                           "")) %>%
+  kable()
+```
+

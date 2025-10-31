@@ -1,0 +1,82 @@
+---
+title: "flex-demo"
+author: "Will Sheahan"
+date: "`r Sys.Date()`"
+output: flexdashboard::flex_dashboard
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+library(flexdashboard)
+library(shiny)
+library(ggplot2)
+
+# Create a demo CSV if it doesn't exist
+if (!file.exists("C:/Users/wsheahan/Box/MNTD/Projects/RHCC (Rotary)/Dashboard/data/raw/demo_data.csv")) {
+  set.seed(123)
+  df <- data.frame(
+    x = rnorm(100),
+    y = rnorm(100),
+    z = rpois(100, 5)
+  )
+  write.csv(df, "demo_data.csv", row.names = FALSE)
+}
+
+#create a refresh button
+actionButton("refresh", "🔄 Refresh Data")
+
+
+# Reactive expression that reloads CSV when button is clicked
+mydata <- reactive({
+  input$refresh  # depend on the button
+  isolate({
+    read.csv("demo_data.csv")
+  })
+})
+
+#auto check for updates version
+# mydata <- reactiveFileReader(
+#   intervalMillis = 30000,   # check for updates every 30 sec
+#   session = NULL,
+#   filePath = "demo_data.csv",
+#   readFunc = read.csv
+# )
+```
+
+## Row 1
+
+### Demo Plot 1 - Scatterplot
+```{r, echo=FALSE}
+#demo plot 1
+renderPlot({
+  df <- mydata()
+  ggplot(df, aes(x, y)) +
+    geom_point(color = "steelblue") +
+    theme_minimal()
+})
+```
+
+### Demo Plot 2 - Histogram
+```{r, echo=FALSE}
+renderPlot({
+  df <- mydata()
+  ggplot(df, aes(z)) +
+    geom_histogram(fill = "tomato", bins = 20) +
+    theme_minimal()
+})
+```
+
+## Row 2
+
+### Demo Table 1
+```{r, echo=FALSE}
+renderTable({
+  head(mydata())
+})
+```
+
+
