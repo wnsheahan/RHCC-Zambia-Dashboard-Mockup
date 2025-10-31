@@ -1,0 +1,17 @@
+# Ignore data and private content
+data/
+*.csv
+*.xlsx
+*.xls
+*.rds
+
+# Ignore R and Quarto caches
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+_quarto/
+
+# Ignore temporary render outputs
+*.html
+!docs/*.html  # Allow rendered site files in docs
