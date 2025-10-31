@@ -2,8 +2,9 @@
 data/
 *.csv
 *.xlsx
-*.xls
 *.rds
+
+_quarto/
 
 # Ignore R and Quarto caches
 .Rproj.user/
