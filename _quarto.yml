@@ -1,0 +1,17 @@
+title: "RHCC-Zambia-Mockup"
+date: '`r format(Sys.Date(), "%Y-%b-%d")`'
+
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "RHCC Zambia Dashboard"
+
+format:
+  dashboard:
+    embed-resources: true
+    theme: cosmo
+    logo: "images/path_logo.png"
+    orientation: rows
+    scrolling: true

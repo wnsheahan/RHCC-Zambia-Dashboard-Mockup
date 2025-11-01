@@ -16,3 +16,5 @@ _quarto/
 # Ignore temporary render outputs
 *.html
 !docs/*.html  # Allow rendered site files in docs
+
+/.quarto/
